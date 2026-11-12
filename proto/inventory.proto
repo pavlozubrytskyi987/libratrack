@@ -1,0 +1,102 @@
+syntax = "proto3";
+
+package inventory.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "libratrack/gen/inventory";
+
+// A physical book copy in the library inventory.
+message Copy {
+  string id = 1;
+  string book_id = 2;
+  string inventory_number = 3;
+  Status status = 4;
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    AVAILABLE = 1;
+    BORROWED = 2;
+    LOST = 3;
+  }
+}
+
+message GetCopyRequest {
+  string id = 1;
+}
+
+message RegisterCopyRequest {
+  string book_id = 1;
+  string inventory_number = 2;
+}
+
+message UpdateCopyStatusRequest {
+  string id = 1;
+  Copy.Status status = 2;
+}
+
+message WatchRequest {
+  string id = 1;
+  int32 max_updates = 2; // 0 means unlimited
+}
+
+message StatusUpdate {
+  string copy_id = 1;
+  Copy.Status status = 2;
+  google.protobuf.Timestamp changed_at = 3;
+}
+
+message BulkRegisterSummary {
+  int32 registered = 1;
+  int32 failed = 2;
+  repeated string copy_ids = 3;
+}
+
+message SyncEvent {
+  string branch_id = 1;
+  string copy_id = 2;
+  Copy.Status status = 3;
+  int64 sequence = 4;
+  bool applied = 5;
+  string note = 6;
+}
+
+service InventoryService {
+  // Unary — get a single copy by ID
+  rpc GetCopy(GetCopyRequest) returns (Copy) {
+    option (google.api.http) = {
+      get: "/v1/copies/{id}"
+    };
+  }
+
+  // Unary — register a new copy
+  rpc RegisterCopy(RegisterCopyRequest) returns (Copy) {
+    option (google.api.http) = {
+      post: "/v1/copies"
+      body: "*"
+    };
+  }
+
+  // Unary — update the status of a copy
+  rpc UpdateCopyStatus(UpdateCopyStatusRequest) returns (Copy) {
+    option (google.api.http) = {
+      patch: "/v1/copies/{id}/status"
+      body: "*"
+    };
+  }
+
+  // Server streaming — live status updates
+  rpc WatchCopyStatus(WatchRequest) returns (stream StatusUpdate) {
+    option (google.api.http) = {
+      get: "/v1/copies/{id}/watch"
+    };
+  }
+
+  // Client streaming — bulk registration
+  rpc BulkRegisterCopies(stream RegisterCopyRequest)
+      returns (BulkRegisterSummary);
+
+  // Bidirectional streaming — branch sync
+  rpc SyncInventory(stream SyncEvent) returns (stream SyncEvent);
+}
